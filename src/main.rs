@@ -1,8 +1,9 @@
-//! An example of generating julia fractals.
-extern crate image;
-extern crate num_complex;
+use std::env;
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    println!("{:?}", args);
+
     let imgx = 800;
     let imgy = 800;
 
