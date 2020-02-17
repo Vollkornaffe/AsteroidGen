@@ -1,4 +1,5 @@
 use std::env;
+use rand::prelude::*;
 
 fn print_example() {
     println!("Example usage: ");
@@ -124,15 +125,41 @@ fn main() {
 
     let mut graph = Graph::new();
 
-    graph.add_node(0.0, 0.0, 0.01);
-    graph.add_node(0.1, 0.1, 0.01);
-    graph.add_node(0.1, 0.0, 0.01);
-    graph.add_node(0.0, 0.1, 0.01);
-    graph.add_edge(0, 1, 0.005);
-    graph.add_edge(1, 1, 0.005);
-    graph.add_edge(0, 1, 0.005);
-    graph.add_edge(2, 1, 0.005);
-    graph.add_edge(3, 1, 0.005);
+    loop {
+        let mut rng = rand::thread_rng();
+        let exit: f32 = rng.gen();
+
+        let x = rng.gen::<f32>() - 0.5;
+        let y = rng.gen::<f32>() - 0.5;
+        println!("x: {}, y: {}", x, y);
+        graph.add_node(x, y, 0.01);
+
+        if exit < 0.1 {
+            break;
+        }
+    }
+
+    loop {
+        let mut rng = rand::thread_rng();
+        let exit: f32 = rng.gen();
+
+        let mut a;
+        let mut b;
+        loop {
+            a = (graph.nodes.len() as f32 * rng.gen::<f32>()) as usize;
+            b = (graph.nodes.len() as f32 * rng.gen::<f32>()) as usize;
+            if a != b {
+                break;
+            }
+        }
+
+        println!("a: {}, b: {}", a, b);
+        graph.add_edge(a, b, 0.005);
+
+        if exit < 0.1 {
+            break;
+        }
+    }
 
     // Create a new ImgBuf with width: imgx and height: imgy
     let mut imgbuf = image::ImageBuffer::new(settings.imgx, settings.imgy);
