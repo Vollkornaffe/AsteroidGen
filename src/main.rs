@@ -48,6 +48,7 @@ struct Node {
     size: f32,
 }
 
+#[derive(Clone, Copy)]
 struct Edge {
     a: usize,
     b: usize,
@@ -56,6 +57,7 @@ struct Edge {
 
 struct Graph {
     nodes: Vec<Node>,
+    possible_edges: Vec<Edge>,
     edges: Vec<Edge>,
 }
 
@@ -63,6 +65,7 @@ impl Graph {
     fn new() -> Self {
         Self {
             nodes: Vec::new(),
+			possible_edges: Vec::new(),
             edges: Vec::new(),
         }
     }
@@ -71,14 +74,19 @@ impl Graph {
         self.nodes.push(Node { pos_x, pos_y, size });
     }
 
-    fn add_edge(&mut self, a: usize, b: usize, size: f32) {
+    fn add_possible_edge(&mut self, a: usize, b: usize, size: f32) {
         if self.nodes.len() <= a
         || self.nodes.len() <= b {
             panic!("Invalid a or b for graph! #nodes: {}, a: {}, b: {}", self.nodes.len(), a, b);
         }
 
-        self.edges.push(Edge { a, b, size });
+        self.possible_edges.push(Edge { a, b, size });
     }
+
+	fn choose_edge(&mut self, i: usize) {
+		self.edges.push(self.possible_edges[i]);
+		self.possible_edges.remove(i);
+	}
 
     fn dist_to_nodes(&self, q_x: f32, q_y: f32) -> f32 {
         let mut min_dist = std::f32::MAX;
@@ -125,6 +133,7 @@ fn main() {
 
     let mut graph = Graph::new();
 
+	// add some random nodes
     loop {
         let mut rng = rand::thread_rng();
         let exit: f32 = rng.gen();
@@ -134,33 +143,35 @@ fn main() {
         println!("x: {}, y: {}", x, y);
         graph.add_node(x, y, 0.01);
 
-        if exit < 0.1 {
+        if exit < 0.1 && graph.nodes.len() > 3 {
             break;
         }
     }
 
-    loop {
-        let mut rng = rand::thread_rng();
-        let exit: f32 = rng.gen();
+	// calculate dulaunay triangulation so we can have a planar graph
+	let delaunay_points: Vec<delaunator::Point> = graph.nodes.iter().map(
+		|n| delaunator::Point {
+			x: n.pos_x as f64,
+			y: n.pos_y as f64,
+		}
+	).collect();
+	let delaunay_triangulation =
+		delaunator::triangulate(&delaunay_points)
+		.expect("Delaunator failed.");
 
-        let mut a;
-        let mut b;
-        loop {
-            a = (graph.nodes.len() as f32 * rng.gen::<f32>()) as usize;
-            b = (graph.nodes.len() as f32 * rng.gen::<f32>()) as usize;
-            if a != b {
-                break;
-            }
-        }
+	println!("{:?}", delaunay_triangulation.triangles);
+	println!("{:?}", delaunay_triangulation.halfedges);
 
-        println!("a: {}, b: {}", a, b);
-        graph.add_edge(a, b, 0.005);
-
-        if exit < 0.1 {
-            break;
-        }
-    }
-
+	// then use the triangulation to generate some possible
+	for i in 0..delaunay_triangulation.halfedges.len() {
+		graph.add_possible_edge(
+			delaunay_triangulation.halfedges[i],
+			delaunay_triangulation.triangles[i],
+			0.005,
+		);
+	}
+	graph.edges = graph.possible_edges.clone();
+	
     // Create a new ImgBuf with width: imgx and height: imgy
     let mut imgbuf = image::ImageBuffer::new(settings.imgx, settings.imgy);
 
