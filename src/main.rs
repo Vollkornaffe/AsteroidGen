@@ -83,11 +83,6 @@ impl Graph {
         self.possible_edges.push(Edge { a, b, size });
     }
 
-	fn choose_edge(&mut self, i: usize) {
-		self.edges.push(self.possible_edges[i]);
-		self.possible_edges.remove(i);
-	}
-
     fn dist_to_nodes(&self, q_x: f32, q_y: f32) -> f32 {
         let mut min_dist = std::f32::MAX;
         for node in &self.nodes {
@@ -143,7 +138,7 @@ fn main() {
         println!("x: {}, y: {}", x, y);
         graph.add_node(x, y, 0.01);
 
-        if exit < 0.1 && graph.nodes.len() > 3 {
+        if graph.nodes.len() > 7 || (exit < 0.1 && graph.nodes.len() > 3) {
             break;
         }
     }
@@ -177,7 +172,33 @@ fn main() {
 			0.005,
 		);
 	}
-	graph.edges = graph.possible_edges.clone();
+
+	// create MST from triangulation
+	// need to init with one edge
+	graph.edges.push(graph.possible_edges[0]);
+	// track which nodes are in the MST so far
+	let mut connected = vec![graph.edges[0].a, graph.edges[0].b];
+	// just add all edges that don't create a loop.
+	loop {
+		let mut smt_new = false;
+		for &possible_edge in &graph.possible_edges {
+			let a = possible_edge.a;
+			let b = possible_edge.b;
+			match (connected.contains(&a), connected.contains(&b)) {
+				(true, true) => {continue},
+				(false, true) => {},
+				(true, false) => {},
+				(false, false) => {continue},
+			}
+			smt_new = true;
+			connected.push(possible_edge.a);
+			connected.push(possible_edge.b);
+			graph.edges.push(possible_edge);
+		}
+		if !smt_new {
+			break;
+		}
+	}
 	
     // Create a new ImgBuf with width: imgx and height: imgy
     let mut imgbuf = image::ImageBuffer::new(settings.imgx, settings.imgy);
