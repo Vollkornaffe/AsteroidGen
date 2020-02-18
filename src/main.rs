@@ -159,14 +159,21 @@ fn main() {
 		delaunator::triangulate(&delaunay_points)
 		.expect("Delaunator failed.");
 
-	println!("{:?}", delaunay_triangulation.triangles);
-	println!("{:?}", delaunay_triangulation.halfedges);
-
 	// then use the triangulation to generate some possible
-	for i in 0..delaunay_triangulation.halfedges.len() {
+	for i in 0..(delaunay_triangulation.triangles.len() / 3) {
 		graph.add_possible_edge(
-			delaunay_triangulation.halfedges[i],
-			delaunay_triangulation.triangles[i],
+			delaunay_triangulation.triangles[i * 3 + 0],
+			delaunay_triangulation.triangles[i * 3 + 1],
+			0.005,
+		);
+		graph.add_possible_edge(
+			delaunay_triangulation.triangles[i * 3 + 1],
+			delaunay_triangulation.triangles[i * 3 + 2],
+			0.005,
+		);
+		graph.add_possible_edge(
+			delaunay_triangulation.triangles[i * 3 + 2],
+			delaunay_triangulation.triangles[i * 3 + 0],
 			0.005,
 		);
 	}
