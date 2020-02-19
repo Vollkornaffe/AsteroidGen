@@ -101,6 +101,17 @@ impl Graph {
         min_dist
     }
 
+    fn dist_to_nodes_whitelist(&self, whitelist: &Vec<usize>, q: cgmath::Vector2<f32>) -> f32 {
+        let mut min_dist = std::f32::MAX;
+        for node in whitelist.iter().map(|&i| &self.nodes[i]) {
+            let dist = (q - node.pos).magnitude() - node.size;
+            if dist < min_dist {
+                min_dist = dist;
+            }
+        }
+        min_dist
+    }
+
     fn dist_to_edges(&self, q: cgmath::Vector2<f32>) -> f32 {
         let mut min_dist = std::f32::MAX;
         for edge in &self.edges {
@@ -169,9 +180,9 @@ fn main() {
         let x = rng.gen::<f32>() - 0.5;
         let y = rng.gen::<f32>() - 0.5;
         println!("x: {}, y: {}", x, y);
-        graph.add_node(vec2(x, y), 0.01);
+        graph.add_node(vec2(x, y), 0.2);
 
-        if graph.nodes.len() > 100 || (exit < 0.05 && graph.nodes.len() > 3) {
+        if graph.nodes.len() > 20 || (exit < 0.01 && graph.nodes.len() > 3) {
             break;
         }
     }
@@ -280,8 +291,9 @@ fn main() {
         if graph.dist_to_edges(pixel_pos) < 0.0 {
             *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 1.0));
         }
-        if graph.dist_to_nodes(pixel_pos) < 0.0 {
-            *pixel = image::Rgb(to_color_rgb(1.0, 0.0, 0.0));
+        //if graph.dist_to_nodes(pixel_pos) < 0.0 {
+        if graph.dist_to_nodes_whitelist(&delaunay_triangulation.hull, pixel_pos) < 0.0 {
+            *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 0.0));
         }
     }
 
