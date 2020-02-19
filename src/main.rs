@@ -3,15 +3,18 @@ use cgmath::vec3;
 use cgmath::InnerSpace;
 use rand::prelude::*;
 use std::env;
+use core::ops::Deref;
 
 fn print_example() {
     println!("Example usage: ");
-    println!("cargo run imgx imgy scale node_size edge_size");
-    println!("cargo run 100 100 0.2 0.1 1.0");
+    println!("cargo run numx numy imgx imgy scale node_size edge_size");
+    println!("cargo run 4 4 800 800 0.2 0.1 1.0");
     panic!()
 }
 
 struct Settings {
+    numx: u32,
+    numy: u32,
     imgx: u32,
     imgy: u32,
     outname: String,
@@ -19,16 +22,20 @@ struct Settings {
 
 impl Settings {
     fn new(args: Vec<String>) -> Self {
-        if args.len() < 4 {
+        if args.len() < 6 {
             println!("Not enough arguments given.");
             print_example();
         }
 
-        let imgx = args[1].parse::<u32>().expect("imgx couldn't be parsed");
-        let imgy = args[2].parse::<u32>().expect("imgy couldn't be parsed");
-        let outname = args[3].clone();
+        let numx = args[1].parse::<u32>().expect("imgx couldn't be parsed");
+        let numy = args[2].parse::<u32>().expect("imgy couldn't be parsed");
+        let imgx = args[3].parse::<u32>().expect("imgx couldn't be parsed");
+        let imgy = args[4].parse::<u32>().expect("imgy couldn't be parsed");
+        let outname = args[5].clone();
 
         Self {
+            numx,
+            numy,
             imgx,
             imgy,
             outname,
@@ -167,9 +174,8 @@ impl Triangle {
     }
 }
 
-fn main() {
-    let settings = Settings::new(env::args().collect());
 
+fn generate_asteroid(settings: &Settings) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let mut graph = Graph::new();
 
     // add some random nodes
@@ -187,7 +193,7 @@ fn main() {
         }
     }
 
-    // calculate dulaunay triangulation so we can have a planar graph
+    // calculate dulaunay triangulation
     let delaunay_points: Vec<delaunator::Point> = graph
         .nodes
         .iter()
@@ -214,62 +220,14 @@ fn main() {
         let c = graph.nodes[c_i].pos;
 
         triangles.push(Triangle::new(a, b, c));
-
-        graph.add_possible_edge(
-            delaunay_triangulation.triangles[i * 3 + 0],
-            delaunay_triangulation.triangles[i * 3 + 1],
-            0.005,
-        );
-        graph.add_possible_edge(
-            delaunay_triangulation.triangles[i * 3 + 1],
-            delaunay_triangulation.triangles[i * 3 + 2],
-            0.005,
-        );
-        graph.add_possible_edge(
-            delaunay_triangulation.triangles[i * 3 + 2],
-            delaunay_triangulation.triangles[i * 3 + 0],
-            0.005,
-        );
-    }
-
-    // sort the edges by length so that the tree is minimal
-    graph
-        .possible_edges
-        .sort_by(|a, b| b.length.partial_cmp(&a.length).unwrap());
-
-    // create MST from triangulation
-    // need to init with one edge
-    graph.edges.push(graph.possible_edges[0]);
-    // track which nodes are in the MST so far
-    let mut connected = vec![graph.edges[0].a, graph.edges[0].b];
-    // just add all edges that don't create a loop.
-    loop {
-        let mut smt_new = false;
-        for &possible_edge in &graph.possible_edges {
-            let a = possible_edge.a;
-            let b = possible_edge.b;
-            match (connected.contains(&a), connected.contains(&b)) {
-                (true, true) => continue,
-                (false, true) => {}
-                (true, false) => {}
-                (false, false) => continue,
-            }
-            smt_new = true;
-            connected.push(possible_edge.a);
-            connected.push(possible_edge.b);
-            graph.edges.push(possible_edge);
-            continue;
-        }
-        if !smt_new {
-            break;
-        }
-    }
+    };
 
     // Create a new ImgBuf with width: imgx and height: imgy
     let mut imgbuf = image::ImageBuffer::new(settings.imgx, settings.imgy);
 
     // Iterate over the coordinates and pixels of the image
     for (i, j, pixel) in imgbuf.enumerate_pixels_mut() {
+
         let x = (i as f32 + 0.5) / settings.imgx as f32 - 0.5;
         let y = (j as f32 + 0.5) / settings.imgy as f32 - 0.5;
 
@@ -288,15 +246,32 @@ fn main() {
         if in_triangles {
             *pixel = image::Rgb(to_color_rgb(bary_coords.x, bary_coords.y, bary_coords.z));
         }
-        if graph.dist_to_edges(pixel_pos) < 0.0 {
-            *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 1.0));
-        }
-        //if graph.dist_to_nodes(pixel_pos) < 0.0 {
         if graph.dist_to_nodes_whitelist(&delaunay_triangulation.hull, pixel_pos) < 0.0 {
             *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 0.0));
         }
     }
 
+    imgbuf
+}
+
+fn main() {
+    let settings = Settings::new(env::args().collect());
+
+    let mut imagebuffers = Vec::new();
+    for i in 0..settings.numx {
+        for j in 0..settings.numx {
+            imagebuffers.push(generate_asteroid(&settings));
+        }
+    }
+
+    let mut imgbuf = image::ImageBuffer::new(settings.imgx * settings.numx, settings.imgy * settings.numy);
+    for (i, j, pixel) in imgbuf.enumerate_pixels_mut() {
+        let buffer_i = i / settings.imgx;
+        let buffer_j = j / settings.imgy;
+        let buffer = &imagebuffers[(buffer_i * settings.numy + buffer_j) as usize];
+        *pixel = *buffer.get_pixel(i % settings.imgx, j % settings.imgy);
+    }
+    
     // Save the image
     imgbuf.save(settings.outname).unwrap();
 }
