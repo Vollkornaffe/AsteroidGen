@@ -1,5 +1,6 @@
 use cgmath::vec2;
 use cgmath::vec3;
+use cgmath::InnerSpace;
 use rand::prelude::*;
 use std::env;
 
@@ -40,8 +41,7 @@ fn to_color_rgb(r: f32, g: f32, b: f32) -> [u8; 3] {
 }
 
 struct Node {
-    pos_x: f32,
-    pos_y: f32,
+    pos: cgmath::Vector2<f32>,
     size: f32,
 }
 
@@ -68,8 +68,8 @@ impl Graph {
         }
     }
 
-    fn add_node(&mut self, pos_x: f32, pos_y: f32, size: f32) {
-        self.nodes.push(Node { pos_x, pos_y, size });
+    fn add_node(&mut self, pos: cgmath::Vector2<f32>, size: f32) {
+        self.nodes.push(Node { pos, size });
     }
 
     fn add_possible_edge(&mut self, a: usize, b: usize, size: f32) {
@@ -82,22 +82,18 @@ impl Graph {
             );
         }
 
-        let d_x = self.nodes[a].pos_x - self.nodes[b].pos_x;
-        let d_y = self.nodes[a].pos_y - self.nodes[b].pos_y;
         self.possible_edges.push(Edge {
             a,
             b,
-            length: (d_x * d_x + d_y * d_y).sqrt(),
+            length: (self.nodes[a].pos - self.nodes[b].pos).magnitude(),
             size,
         });
     }
 
-    fn dist_to_nodes(&self, q_x: f32, q_y: f32) -> f32 {
+    fn dist_to_nodes(&self, q: cgmath::Vector2<f32>) -> f32 {
         let mut min_dist = std::f32::MAX;
         for node in &self.nodes {
-            let dist_x = q_x - node.pos_x;
-            let dist_y = q_y - node.pos_y;
-            let dist = (dist_x * dist_x + dist_y * dist_y).sqrt() - node.size;
+            let dist = (q - node.pos).magnitude() - node.size;
             if dist < min_dist {
                 min_dist = dist;
             }
@@ -105,25 +101,15 @@ impl Graph {
         min_dist
     }
 
-    fn dist_to_edges(&self, q_x: f32, q_y: f32) -> f32 {
+    fn dist_to_edges(&self, q: cgmath::Vector2<f32>) -> f32 {
         let mut min_dist = std::f32::MAX;
         for edge in &self.edges {
-            let a_x = self.nodes[edge.a].pos_x;
-            let a_y = self.nodes[edge.a].pos_y;
-            let b_x = self.nodes[edge.b].pos_x;
-            let b_y = self.nodes[edge.b].pos_y;
-            let qa_x = q_x - a_x;
-            let qa_y = q_y - a_y;
-            let ba_x = b_x - a_x;
-            let ba_y = b_y - a_y;
-            let h = num::clamp(
-                (qa_x * ba_x + qa_y * ba_y) / (ba_x * ba_x + ba_y * ba_y),
-                0.0,
-                1.0,
-            );
-            let dist_x = qa_x - ba_x * h;
-            let dist_y = qa_y - ba_y * h;
-            let dist = (dist_x * dist_x + dist_y * dist_y).sqrt() - edge.size;
+            let a = self.nodes[edge.a].pos;
+            let b = self.nodes[edge.b].pos;
+            let qa = q - a;
+            let ba = b - a;
+            let h = num::clamp((qa.dot(ba)) / (ba.dot(ba)), 0.0, 1.0);
+            let dist = (qa - h * ba).magnitude();
             if dist < min_dist {
                 min_dist = dist;
             }
@@ -183,7 +169,7 @@ fn main() {
         let x = rng.gen::<f32>() - 0.5;
         let y = rng.gen::<f32>() - 0.5;
         println!("x: {}, y: {}", x, y);
-        graph.add_node(x, y, 0.01);
+        graph.add_node(vec2(x, y), 0.01);
 
         if graph.nodes.len() > 7 || (exit < 0.1 && graph.nodes.len() > 3) {
             break;
@@ -195,8 +181,8 @@ fn main() {
         .nodes
         .iter()
         .map(|n| delaunator::Point {
-            x: n.pos_x as f64,
-            y: n.pos_y as f64,
+            x: n.pos.x as f64,
+            y: n.pos.y as f64,
         })
         .collect();
     let delaunay_triangulation =
@@ -208,18 +194,13 @@ fn main() {
 
     // then use the triangulation to generate some possible edges
     for i in 0..(delaunay_triangulation.triangles.len() / 3) {
-
         let a_i = delaunay_triangulation.triangles[i * 3 + 0];
         let b_i = delaunay_triangulation.triangles[i * 3 + 1];
         let c_i = delaunay_triangulation.triangles[i * 3 + 2];
 
-        let a_n = &graph.nodes[a_i];
-        let b_n = &graph.nodes[b_i];
-        let c_n = &graph.nodes[c_i];
-
-        let a = vec2(a_n.pos_x, a_n.pos_y);
-        let b = vec2(b_n.pos_x, b_n.pos_y);
-        let c = vec2(c_n.pos_x, c_n.pos_y);
+        let a = graph.nodes[a_i].pos;
+        let b = graph.nodes[b_i].pos;
+        let c = graph.nodes[c_i].pos;
 
         triangles.push(Triangle::new(a, b, c));
 
@@ -281,10 +262,12 @@ fn main() {
         let x = (i as f32 + 0.5) / settings.imgx as f32 - 0.5;
         let y = (j as f32 + 0.5) / settings.imgy as f32 - 0.5;
 
-        if graph.dist_to_edges(x, y) < 0.0 {
+        let pixel_pos = vec2(x, y);
+
+        if graph.dist_to_edges(pixel_pos) < 0.0 {
             *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 1.0));
         }
-        if graph.dist_to_nodes(x, y) < 0.0 {
+        if graph.dist_to_nodes(pixel_pos) < 0.0 {
             *pixel = image::Rgb(to_color_rgb(1.0, 0.0, 0.0));
         }
     }
