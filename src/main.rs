@@ -204,8 +204,25 @@ fn main() {
 
     println!("{:?}", delaunay_triangulation.hull);
 
+    let mut triangles = Vec::new();
+
     // then use the triangulation to generate some possible edges
     for i in 0..(delaunay_triangulation.triangles.len() / 3) {
+
+        let a_i = delaunay_triangulation.triangles[i * 3 + 0];
+        let b_i = delaunay_triangulation.triangles[i * 3 + 1];
+        let c_i = delaunay_triangulation.triangles[i * 3 + 2];
+
+        let a_n = &graph.nodes[a_i];
+        let b_n = &graph.nodes[b_i];
+        let c_n = &graph.nodes[c_i];
+
+        let a = vec2(a_n.pos_x, a_n.pos_y);
+        let b = vec2(b_n.pos_x, b_n.pos_y);
+        let c = vec2(c_n.pos_x, c_n.pos_y);
+
+        triangles.push(Triangle::new(a, b, c));
+
         graph.add_possible_edge(
             delaunay_triangulation.triangles[i * 3 + 0],
             delaunay_triangulation.triangles[i * 3 + 1],
