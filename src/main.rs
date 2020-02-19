@@ -1,5 +1,7 @@
 use std::env;
 use rand::prelude::*;
+use cgmath::vec2;
+use cgmath::vec3;
 
 fn print_example() {
     println!("Example usage: ");
@@ -52,6 +54,7 @@ struct Node {
 struct Edge {
     a: usize,
     b: usize,
+    length: f32,
     size: f32,
 }
 
@@ -80,7 +83,9 @@ impl Graph {
             panic!("Invalid a or b for graph! #nodes: {}, a: {}, b: {}", self.nodes.len(), a, b);
         }
 
-        self.possible_edges.push(Edge { a, b, size });
+        let d_x = self.nodes[a].pos_x - self.nodes[b].pos_x;
+        let d_y = self.nodes[a].pos_y - self.nodes[b].pos_y;
+        self.possible_edges.push(Edge { a, b, length: (d_x*d_x + d_y*d_y).sqrt(), size });
     }
 
     fn dist_to_nodes(&self, q_x: f32, q_y: f32) -> f32 {
@@ -122,6 +127,43 @@ impl Graph {
     }
 }
 
+struct Triangle {
+    a: cgmath::Vector2::<f32>,
+    b: cgmath::Vector2::<f32>,
+    c: cgmath::Vector2::<f32>,
+    det: f32,
+}
+
+impl Triangle {
+    fn new(
+        a: cgmath::Vector2::<f32>,
+        b: cgmath::Vector2::<f32>,
+        c: cgmath::Vector2::<f32>,
+    ) -> Self {
+        Self {
+            a, b, c,
+            det: (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y),
+        }
+    }
+
+
+    fn contains(&self, p: cgmath::Vector2<f32>) -> bool {
+        let bary_coords = self.cart_to_bary(p);
+        bary_coords.x < 0.0 || bary_coords.y < 0.0 || bary_coords.z < 0.0
+    }
+
+    fn bary_to_cart(&self, coords: cgmath::Vector3::<f32>) -> cgmath::Vector2::<f32> {
+        self.a * coords.x + self.b * coords.y + self.c * coords.z
+    }
+
+    fn cart_to_bary(&self, coords: cgmath::Vector2::<f32>) -> cgmath::Vector3::<f32> {
+        let mu_1 = ((self.b.y - self.c.y) * (coords.x - self.c.x) + (self.c.x - self.b.x) * (coords.y - self.c.y)) / self.det;
+        let mu_2 = ((self.c.y - self.a.y) * (coords.x - self.c.x) + (self.a.x - self.c.x) * (coords.y - self.c.y)) / self.det;
+        let mu_3 = 1.0 - mu_1 - mu_2;
+        vec3(mu_1, mu_2, mu_3)
+    }
+}
+
 fn main() {
 
     let settings = Settings::new(env::args().collect());
@@ -143,6 +185,7 @@ fn main() {
         }
     }
 
+
 	// calculate dulaunay triangulation so we can have a planar graph
 	let delaunay_points: Vec<delaunator::Point> = graph.nodes.iter().map(
 		|n| delaunator::Point {
@@ -154,7 +197,9 @@ fn main() {
 		delaunator::triangulate(&delaunay_points)
 		.expect("Delaunator failed.");
 
-	// then use the triangulation to generate some possible
+    println!("{:?}", delaunay_triangulation.hull);
+
+	// then use the triangulation to generate some possible edges
 	for i in 0..(delaunay_triangulation.triangles.len() / 3) {
 		graph.add_possible_edge(
 			delaunay_triangulation.triangles[i * 3 + 0],
@@ -172,6 +217,11 @@ fn main() {
 			0.005,
 		);
 	}
+
+    // sort the edges by length so that the tree is minimal
+    graph.possible_edges.sort_by(
+        |a, b| b.length.partial_cmp(&a.length).unwrap()
+    );
 
 	// create MST from triangulation
 	// need to init with one edge
@@ -194,6 +244,7 @@ fn main() {
 			connected.push(possible_edge.a);
 			connected.push(possible_edge.b);
 			graph.edges.push(possible_edge);
+            continue;
 		}
 		if !smt_new {
 			break;
