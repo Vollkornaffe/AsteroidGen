@@ -171,7 +171,7 @@ fn main() {
         println!("x: {}, y: {}", x, y);
         graph.add_node(vec2(x, y), 0.01);
 
-        if graph.nodes.len() > 7 || (exit < 0.1 && graph.nodes.len() > 3) {
+        if graph.nodes.len() > 100 || (exit < 0.05 && graph.nodes.len() > 3) {
             break;
         }
     }
@@ -264,6 +264,19 @@ fn main() {
 
         let pixel_pos = vec2(x, y);
 
+        let mut in_triangles = false;
+        let mut bary_coords = vec3(0.0, 0.0, 0.0);
+        for triangle in &triangles {
+            bary_coords = triangle.cart_to_bary(pixel_pos);
+            if bary_coords.x >= 0.0 && bary_coords.y >= 0.0 && bary_coords.z >= 0.0 {
+                in_triangles = true;
+                break;
+            }
+        }
+
+        if in_triangles {
+            *pixel = image::Rgb(to_color_rgb(bary_coords.x, bary_coords.y, bary_coords.z));
+        }
         if graph.dist_to_edges(pixel_pos) < 0.0 {
             *pixel = image::Rgb(to_color_rgb(0.0, 0.0, 1.0));
         }
